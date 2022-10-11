@@ -1,0 +1,18 @@
+[package]
+name = "attiny85-spi"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+panic-halt = "0.2.0"
+ufmt = "0.2.0"
+
+[dependencies.arduino-hal]
+git = "https://github.com/Rahix/avr-hal"
+branch = "main"
+features = ["trinket"]  # This is the attiny.
+
+[profile.release]
+lto = true
+panic = "abort"  # fixes eh_personality
+

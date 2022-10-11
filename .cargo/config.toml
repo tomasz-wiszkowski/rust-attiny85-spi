@@ -1,0 +1,11 @@
+[build]
+target = "attiny85.json"
+
+[unstable]
+build-std = ["core"]
+
+[env]
+AVR_CPU_FREQUENCY_HZ = "16_000_000"
+
+[target.'cfg(target_arch = "avr")']
+runner = "./micronucleus_runner.sh"

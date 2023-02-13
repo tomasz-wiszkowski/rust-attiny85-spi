@@ -13,6 +13,11 @@ branch = "main"
 features = ["trinket"]  # This is the attiny.
 
 [profile.release]
+opt-level = 3
 lto = true
-panic = "abort"  # fixes eh_personality
+panic = "abort"
 
+[profile.dev]
+opt-level = 3
+lto = true
+panic = "abort"

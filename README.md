@@ -9,11 +9,15 @@ To use this, you need to
 * install Rust nightly 
 * install AVR GCC
 
-```    
+```sh
 rustup install nightly
 rustup default nightly
-sudo apt install avr-gcc
+rustup component add rust-src
+sudo apt install gcc-avr avr-libc
 ```
+
+Lastly, your `udev` rules must specify the appropriate access rights to allow
+you to program the ATtiny controllers: install rules specified [here](https://github.com/micronucleus/micronucleus/blob/master/commandline/49-micronucleus.rules).
 
 ### ATTiny85 notes
 

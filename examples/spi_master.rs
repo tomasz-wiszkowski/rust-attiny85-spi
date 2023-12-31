@@ -2,7 +2,7 @@
 #![no_main]
 
 extern crate panic_halt;
-use attiny85::spi::{self, SPIRead, SPIWrite, SPI};
+use attiny85::spi::{self, SPIWrite, SPI};
 
 // Example master SPI implementation.
 // Works with example slave SPI implementation.
@@ -24,13 +24,16 @@ fn main() -> ! {
 
     master.init();
 
+    // Run at maximum speed.
+    peripherals.CPU.osccal.write(|w| w.osccal().bits(0xff));
+
     loop {
         // It's possible to configure prescaler to transmit data  at a lower rate.
         // This allows transmitting data over unreliable medium,
         // such as the 433MHz radio transitters/receivers.
         peripherals.CPU.clkpr.write(|w| w.clkpce().set_bit());
         peripherals.CPU.clkpr.write(|w| w.clkps().prescaler_8());
-        master.write(b"bonanza!\n\r\0").unwrap();
+        master.write(b"\xaa\xaabonanza!\n\r\0").unwrap();
 
         loop {
             let mut data_in = [0u8];
@@ -43,6 +46,6 @@ fn main() -> ! {
         // Sleep uses TC0. Reset prescaler for accurate sleep durations.
         peripherals.CPU.clkpr.write(|w| w.clkpce().set_bit());
         peripherals.CPU.clkpr.write(|w| w.clkps().prescaler_1());
-        arduino_hal::delay_ms(1);
+        arduino_hal::delay_ms(10);
     }
 }

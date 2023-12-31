@@ -16,6 +16,28 @@ fn main() -> ! {
     let pins = arduino_hal::pins!(peripherals);
     let mut led = pins.d1.into_output();
 
+    // Disable components to reduce power usage by 3mA.
+    peripherals.CPU.prr.modify(|_, w| {
+        w.pradc()
+            .set_bit()
+            .prusi()
+            .set_bit()
+            .prtim0()
+            .set_bit()
+            .prtim1()
+            .set_bit()
+    });
+    peripherals
+        .CPU
+        .mcucr
+        .modify(|_, w| w.se().set_bit().sm().pdown().pud().clear_bit());
+
+    // Calibrate oscillator to lower frequency for additional 3mA. Writing `255` runs things at
+    // 200% performance, and eats nearly 10mA more.
+    peripherals.CPU.osccal.modify(|_, w| w.osccal().bits(0));
+    // LED takes about 3mA.
+    led.set_low();
+
     loop {
         points.iter().for_each(|p| {
             (0..511).for_each(|_| {
@@ -26,5 +48,7 @@ fn main() -> ! {
                 arduino_hal::delay_us((200 - p).into());
             });
         });
+        led.set_low();
+        arduino_hal::delay_us(2_000_000);
     }
 }

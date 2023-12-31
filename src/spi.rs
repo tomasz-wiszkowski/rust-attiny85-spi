@@ -25,6 +25,7 @@ pub struct MicroSPI<'a, As: Role> {
 pub trait SPI {
     fn init(&mut self);
     fn exchange(&mut self, data: u8) -> u8;
+    fn fast_send(&mut self, data: &[u8]);
 }
 
 pub trait SPIRead {
@@ -59,9 +60,7 @@ impl<T: SPI> SPIRead for T {
 impl<T: SPI> SPIWrite for T {
     /// Push 8 bits of data, ignoring what's received.
     fn write(&mut self, data: &[u8]) -> Result<usize, Infallible> {
-        data.iter().for_each(|d| {
-            self.exchange(*d);
-        });
+        self.fast_send(data);
         Ok(data.len())
     }
 }
@@ -77,10 +76,28 @@ impl<'a> SPI for MicroSPI<'a, RoleMaster> {
         // Pin 2 is the SCLK, used by master to send us clock pulses. Set to write.
         self.ddrb
             .modify(|_r, w| w.pb0().clear_bit().pb1().set_bit().pb2().set_bit());
-        // Three-wire mode SPI. TC0 is the clock source.
+        // Three-wire mode SPI, clock strobing, apply data on rising edge.
         self.cr.write(|w| w.usiwm().three_wire().usics().ext_neg());
     }
 
+    /// Quickly transmit N bytes of data.
+    ///
+    /// Based on Chapter 15.3.2 of
+    /// https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-2586-AVR-8-bit-Microcontroller-ATtiny25-ATtiny45-ATtiny85_Datasheet.pdf
+    fn fast_send(&mut self, data: &[u8]) {
+        if data.is_empty() {
+            return;
+        }
+
+        data.into_iter().for_each(|v| {
+            self.dr.write(|w| w.bits(*v));
+            (0..=7).for_each(|_| {
+                self.cr.modify(|_, w| w.usitc().set_bit());
+                self.cr.modify(|_, w| w.usitc().set_bit());
+            });
+        });
+        assert!(self.sr.read().usioif().bit_is_set());
+    }
     /// Send or receive 8 bits of data.
     /// Emits 8 clock pulses, pushing supplied data on the MISO pin.
     /// Meanwhile collects MOSI data.
@@ -88,15 +105,16 @@ impl<'a> SPI for MicroSPI<'a, RoleMaster> {
     /// Based on Chapter 15.3.2 of
     /// https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-2586-AVR-8-bit-Microcontroller-ATtiny25-ATtiny45-ATtiny85_Datasheet.pdf
     fn exchange(&mut self, data: u8) -> u8 {
-        self.dr.write(|w| unsafe { w.bits(data) });
+        self.dr.write(|w| w.bits(data));
+        // Clear counter overflow interrupt. Irrelevant for clock strobing operation.
         self.sr.modify(|_, w| w.usioif().set_bit());
-        loop {
-            self.cr
-                .modify(|_, w| w.usitc().set_bit().usiclk().set_bit());
-            if self.sr.read().usioif().bit_is_set() {
-                break;
-            }
-        }
+        self.cr.write(|w| w.usiwm().three_wire().usics().bits(7));
+        (0..=7).for_each(|_| {
+            self.cr.modify(|_, w| w.usitc().set_bit());
+            self.cr.modify(|_, w| w.usitc().set_bit());
+        });
+        // We've strobed clock exactly 8 times, so this should be clear.
+        assert!(self.sr.read().usioif().bit_is_set());
         self.br.read().bits()
     }
 }
@@ -119,7 +137,7 @@ impl<'a> SPI for MicroSPI<'a, RoleSlave> {
     /// Based on Chapter 15.3.3 of
     /// https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-2586-AVR-8-bit-Microcontroller-ATtiny25-ATtiny45-ATtiny85_Datasheet.pdf
     fn exchange(&mut self, data: u8) -> u8 {
-        self.dr.write(|w| unsafe { w.bits(data) });
+        self.dr.write(|w| w.bits(data));
         self.sr.write(|w| w.usioif().set_bit());
         loop {
             if self.sr.read().usioif().bit_is_set() {
@@ -127,5 +145,9 @@ impl<'a> SPI for MicroSPI<'a, RoleSlave> {
             }
         }
         self.br.read().bits()
+    }
+
+    fn fast_send(&mut self, _data: &[u8]) {
+        todo!();
     }
 }
